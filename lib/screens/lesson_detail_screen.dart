@@ -95,6 +95,20 @@ class _LessonDetailScreenState extends State<LessonDetailScreen>
     super.dispose();
   }
 
+  // Toggle hoàn thành lesson (GỌI QUA CONTROLLER)
+  void _toggleCompletion() async {
+    if (_isCompleted) return;
+
+    await theoryController.toggleComplete(
+      lessonTitle: widget.lesson.title,
+      lessonId: widget.lesson.id,
+      // ưu tiên subjectId từ lesson, fallback từ arguments
+      subjectId: widget.lesson.subjectId ?? (Get.arguments?['subjectId'] ?? 0),
+    );
+
+    if (mounted) setState(() => _isCompleted = true);
+  }
+
   // Widget video player
   Widget _buildVideoPlayer() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
@@ -139,19 +153,6 @@ class _LessonDetailScreenState extends State<LessonDetailScreen>
       default:
         return const SizedBox.shrink();
     }
-  }
-
-  // Toggle hoàn thành lesson
-  void _toggleCompletion() async {
-    if (_isCompleted) return;
-
-    await theoryController.toggleComplete(
-      lessonTitle: widget.lesson.title,
-      lessonId: widget.lesson.id,
-      subjectId: widget.lesson.subjectId ?? 0, // ✅ tránh null
-    );
-
-    if (mounted) setState(() => _isCompleted = true);
   }
 
   @override

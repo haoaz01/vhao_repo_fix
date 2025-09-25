@@ -6,7 +6,7 @@ import '../model/progress_history_model.dart';
 class ProgressService {
   // Thay đổi baseUrl nếu cần: trỏ tới server Spring Boot của bạn
   // Nếu dùng Android emulator: 10.0.2.2 thay cho localhost
-  final String baseUrl = "http://192.168.15.192:8080/api/progress";
+  final String baseUrl = "http://192.168.1.219:8080/api/progress";
 
   Future<List<ProgressModel>> fetchProgressByUserAndGrade(int userId, int grade) async {
     final url = Uri.parse("$baseUrl/$userId/$grade");

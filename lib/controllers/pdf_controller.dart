@@ -23,7 +23,7 @@ class PdfController extends GetxController {
     errorMessage.value = '';
     try {
       final response = await _dio.get(
-        'http://192.168.15.192:8080/api/pdf/$fileName',
+        'http://192.168.1.219:8080/api/pdf/$fileName',
         options: Options(
           responseType: ResponseType.bytes,
           receiveTimeout: const Duration(seconds: 30),

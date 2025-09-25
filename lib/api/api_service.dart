@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:get/get.dart';
 
 class APIService extends GetxService {
-  final String baseUrl = "http://10.0.2.2:8080/api";
+  final String baseUrl = "http://192.168.1.219:8080/api";
 
   Map<String, String> getHeaders({String? token}) {
     return {
@@ -142,23 +142,24 @@ class APIService extends GetxService {
   // ------------------------------
   // Dashboard APIs
   Future<Map<String, dynamic>> getDashboard({required int userId}) async {
-    final result = await get('/dashboard/$userId');
+    // Lấy progress theo user rồi tự tổng hợp cho dashboard
+    final result = await get('/progress/user/$userId'); // ✅ đúng backend
     if (result['statusCode'] != 200) return result;
 
-    final data = result['data'] as Map<String, dynamic>;
-    Map<String, dynamic> mapData = {};
-    if (data['subjects'] != null) {
-      for (var subject in data['subjects']) {
-        final lessons =
-        subject['chapters'].expand((c) => c['lessons'] as List).toList();
-        final completed =
-            lessons.where((l) => l['status'] == 'completed').length;
-        final progress = lessons.isNotEmpty ? completed / lessons.length : 0.0;
-        mapData[subject['name']] = {
-          "lessons": lessons,
-          "progress": progress,
-        };
-      }
+    final list = result['data'] as List<dynamic>? ?? [];
+    final mapData = <String, dynamic>{};
+
+    for (final sp in list) {
+      final subjectName = sp['subject']?.toString() ?? '';
+      final total = (sp['totalLessons'] as num?)?.toInt() ?? 0;
+      final completed = (sp['completedLessons'] as num?)?.toInt() ?? 0;
+      final progressPercent = (sp['progressPercent'] as num?)?.toDouble() ?? 0.0;
+
+      mapData[subjectName] = {
+        'totalLessons': total,
+        'completedLessons': completed,
+        'progress': progressPercent / 100.0, // UI dùng 0..1
+      };
     }
     return {'statusCode': 200, 'data': mapData};
   }
@@ -180,19 +181,19 @@ class APIService extends GetxService {
     });
   }
 
-  Future<Map<String, dynamic>> updateSubjectProgress({
-    required int userId,
-    required String subjectCode,
-    required int grade,
-    required double progressPercent,
-  }) async {
-    return post('/progress/update', data: {
-      'userId': userId,
-      'subjectCode': subjectCode,
-      'grade': grade,
-      'progress': progressPercent,
-    });
-  }
+  // Future<Map<String, dynamic>> updateSubjectProgress({
+  //   required int userId,
+  //   required String subjectCode,
+  //   required int grade,
+  //   required double progressPercent,
+  // }) async {
+  //   return post('/progress/update', data: {
+  //     'userId': userId,
+  //     'subjectCode': subjectCode,
+  //     'grade': grade,
+  //     'progress': progressPercent,
+  //   });
+  // }
 
   // ------------------------------
   // Subjects APIs
@@ -207,20 +208,21 @@ class APIService extends GetxService {
 
   // ------------------------------
   // Quiz / PDF APIs
-  Future<Map<String, dynamic>> getQuiz({required int chapterId}) async {
-    return get('/quiz/$chapterId');
-  }
+  // Future<Map<String, dynamic>> getQuiz({required int chapterId}) async {
+  //   return get('/quiz/$chapterId');
+  // }
 
   Future<Map<String, dynamic>> getPdfFiles({
     required int grade,
     String? subject,
+    String? examType, // tuỳ chọn
   }) async {
-    final queryParams = {
+    final queryParams = <String, String>{
       'grade': grade.toString(),
-      if (subject != null) 'subject': subject,
+      if (subject != null && subject.isNotEmpty) 'subject': subject,
+      if (examType != null && examType.isNotEmpty) 'examType': examType,
     };
-    final uri =
-    Uri.parse('$baseUrl/pdfs').replace(queryParameters: queryParams);
+    final uri = Uri.parse('$baseUrl/pdf/list').replace(queryParameters: queryParams); // ✅ đúng backend
     try {
       final response = await http.get(uri, headers: getHeaders());
       final decoded = json.decode(response.body);

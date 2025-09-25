@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import '../app/routes/app_routes.dart';
 import '../controllers/practice_exam_controller.dart';
 import '../controllers/theory_controller.dart';
@@ -12,15 +13,18 @@ class SubjectDetailScreen extends StatelessWidget {
   final int grade;
   final String subject;
 
-  final TheoryController controller = Get.put(TheoryController());
-  final QuizController quizController = Get.put(QuizController());
-  final ProgressController progressController = Get.find<ProgressController>();
+  final TheoryController controller =
+    Get.isRegistered<TheoryController>() ? Get.find<TheoryController>() : Get.put(TheoryController());
+  final QuizController quizController =
+    Get.isRegistered<QuizController>() ? Get.find<QuizController>() : Get.put(QuizController());
+  final ProgressController progressController =
+    Get.isRegistered<ProgressController>() ? Get.find<ProgressController>() : Get.put(ProgressController());
+
 
   SubjectDetailScreen({super.key, int? grade, String? subject})
-      : grade = grade ?? (Get.arguments?['grade'] ?? 6),
+      : grade = grade ?? (Get.arguments?['grade'] ?? 7),
         subject = subject ?? (Get.arguments?['subject'] ?? 'Toán') {
     // Load lý thuyết khi khởi tạo màn hình
-    final mode = Get.arguments?['mode'] ?? 'theory';
     controller.loadTheory(this.subject, this.grade);
   }
 
@@ -31,12 +35,16 @@ class SubjectDetailScreen extends StatelessWidget {
         "title": "Lý thuyết",
         "icon": Icons.menu_book_rounded,
         "color": Colors.blue,
-        "onTap": () {
-          Get.toNamed(AppRoutes.theory, arguments: {
-            'subject': subject,
-            'grade': grade,
-            'mode': 'theory',
-          });
+        "onTap": () async{
+          await controller.loadTheory(subject, grade);
+          // ❌ Không truyền userId nữa (TheoryController sẽ fallback = 1)
+          Get.toNamed(
+            AppRoutes.theory,
+            arguments: {
+              'subject': subject,
+              'grade': grade,
+            },
+          );
         },
       },
       {
@@ -57,7 +65,10 @@ class SubjectDetailScreen extends StatelessWidget {
         "color": Colors.orange,
         "onTap": () async {
           await quizController.loadQuiz(subject, grade);
-          Get.toNamed(AppRoutes.quizDetail, arguments: {'subject': subject, 'grade': grade});
+          Get.toNamed(AppRoutes.quizDetail, arguments: {
+            'subject': subject,
+            'grade': grade,
+          });
         },
       },
       {
@@ -107,14 +118,15 @@ class SubjectDetailScreen extends StatelessWidget {
                 ),
                 itemBuilder: (context, index) {
                   final card = featureCards[index];
+                  final color = card["color"] as MaterialColor;
                   return InkWell(
-                    onTap: card["onTap"],
+                    onTap: card["onTap"] as void Function()?,
                     borderRadius: BorderRadius.circular(18),
-                    splashColor: card["color"].withOpacity(0.2),
+                    splashColor: color.withOpacity(0.2),
                     highlightColor: Colors.white.withOpacity(0.1),
                     child: Card(
                       elevation: 6,
-                      shadowColor: card["color"].withOpacity(0.4),
+                      shadowColor: color.withOpacity(0.4),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
@@ -125,42 +137,47 @@ class SubjectDetailScreen extends StatelessWidget {
                             Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: card["color"].withOpacity(0.15),
+                                color: color.withOpacity(0.15),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: card["color"].withOpacity(0.5),
+                                    color: color.withOpacity(0.5),
                                     blurRadius: 8,
                                     offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
                               padding: const EdgeInsets.all(16),
-                              child: Icon(card["icon"], size: 38, color: card["color"]),
+                              child: Icon(card["icon"] as IconData, size: 38, color: color),
                             ),
                             const SizedBox(height: 16),
-                            Text(card["title"],
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.bold, color: card["color"].shade700)),
+                            Text(
+                              card["title"] as String,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color.shade700),
+                            ),
 
-                            // Chỉ hiện progress cho "Lý thuyết"
+                            // Progress chỉ cho "Lý thuyết"
                             if (card["title"] == "Lý thuyết") ...[
                               const SizedBox(height: 12),
                               Obx(() {
-                                double progress = progressController.getProgress(
-                                    progressController.mapSubjectToCode(subject), grade);
+                                final progress = progressController.getProgress(
+                                  progressController.mapSubjectToCode(subject),
+                                  grade,
+                                );
                                 return Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     LinearProgressIndicator(
                                       value: progress,
                                       minHeight: 8,
-                                      backgroundColor: card["color"].withOpacity(0.2),
-                                      color: card["color"],
+                                      backgroundColor: color.withOpacity(0.2),
+                                      color: color,
                                     ),
                                     const SizedBox(height: 4),
-                                    Text("${(progress * 100).toStringAsFixed(0)}% Hoàn thành",
-                                        style: const TextStyle(fontSize: 12)),
+                                    Text(
+                                      "${(progress * 100).toStringAsFixed(0)}% Hoàn thành",
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
                                   ],
                                 );
                               }),

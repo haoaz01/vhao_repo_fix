@@ -17,26 +17,27 @@ class ProgressController extends GetxController {
     progressMap.refresh();
   }
 
+  // =================== LOAD PROGRESS ===================
   Future<void> loadProgress({required int userId}) async {
     try {
       isLoading.value = true;
 
-      // ✅ sửa endpoint
-      final response = await api.get('/progress/$userId');
+      // ✅ đúng endpoint backend
+      final response = await api.get('/progress/user/$userId');
 
       if (response['statusCode'] == 200) {
         final data = response['data'];
         if (data is List) {
-          for (var subjectProgress in data) {
-            // ✅ sửa key cho đúng ProgressDto
-            final subjectName = subjectProgress['subject']?.toString() ?? '';
-            final grade = subjectProgress['grade'] as int? ?? 0;
+          for (var sp in data) {
+            final subjectName = sp['subject']?.toString() ?? '';
+            final grade = (sp['grade'] as num?)?.toInt() ?? 0;
             final progressPercent =
-                (subjectProgress['progressPercent'] as num?)?.toDouble() ?? 0.0;
+                (sp['progressPercent'] as num?)?.toDouble() ?? 0.0;
 
+            // map tên môn -> code (vd: "Toán" -> "toan")
             final subjectCode = mapSubjectToCode(subjectName);
 
-            // Backend trả 0..100 → scale về 0..1 cho UI
+            // Backend trả % (0..100), UI dùng 0..1
             setProgressLocal(subjectCode, grade, progressPercent / 100.0);
 
             final key = _key(subjectCode, grade);
@@ -53,6 +54,7 @@ class ProgressController extends GetxController {
     }
   }
 
+  // =================== MARK LESSON COMPLETED ===================
   Future<bool> markLessonCompleted({
     required int userId,
     required String subjectName,
@@ -68,6 +70,7 @@ class ProgressController extends GetxController {
         completedLessons[key] = <int>{}.obs;
       }
 
+      // update local trước để UI mượt
       completedLessons[key]!.add(lessonId);
       final completedCount = completedLessons[key]!.length;
       final progress = totalLessons > 0 ? completedCount / totalLessons : 0.0;
@@ -82,13 +85,17 @@ class ProgressController extends GetxController {
         'lessonId': lessonId,
       };
 
+      // FIX: bỏ post trùng, chỉ gọi 1 lần và kiểm tra status
       final response = await api.post('/progress/update', data: updateData);
       if (response['statusCode'] == 200) return true;
 
       // Rollback nếu server lỗi
       completedLessons[key]!.remove(lessonId);
-      setProgressLocal(subjectCode, grade,
-          totalLessons > 0 ? (completedCount - 1) / totalLessons : 0.0);
+      setProgressLocal(
+        subjectCode,
+        grade,
+        totalLessons > 0 ? (completedCount - 1) / totalLessons : 0.0,
+      );
       return false;
     } catch (e) {
       return false;

@@ -21,14 +21,13 @@ class TheoryController extends GetxController {
     super.onInit();
     final args = Get.arguments ?? {};
     subject = args['subject'] ?? 'Toán';
-    grade = args['grade'] ?? 6;
-    userId = args['userId'] ?? 1;
+    grade   = args['grade'] ?? 7;
+    userId  = args['userId'] ?? 15;
 
-    _loadAllCompletedLessons(); // load từ SharedPreferences
-    loadTheory(subject, grade);  // load chapters từ backend
+    _loadAllCompletedLessons();
+    // loadTheory(subject, grade);
     progressController.loadProgress(userId: userId);
 
-    // Auto cập nhật progress khi completedLessonsBySubject thay đổi
     ever(completedLessonsBySubject, (_) => _updateProgress(subject, grade));
   }
 
@@ -82,14 +81,16 @@ class TheoryController extends GetxController {
       final totalLessons = chapters.fold(0, (sum, c) => sum + c.lessons.length);
 
       // Gọi API backend để đánh dấu lesson hoàn thành
-      await progressController.markLessonCompleted(
+      final ok = await progressController.markLessonCompleted(
         userId: userId,
-        subjectName: subject,
+        subjectName: subject,   // tên hiển thị: Toán / Ngữ văn...
         grade: grade,
         lessonId: lessonId,
         totalLessons: totalLessons,
         subjectId: subjectId,
-      );
+      );if (!ok) {
+        // rollback UI local nếu bạn muốn
+      }
     }
 
     await _saveCompletedLessons(subject, grade);
