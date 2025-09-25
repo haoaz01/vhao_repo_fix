@@ -13,36 +13,53 @@ class SubjectDetailScreen extends StatelessWidget {
   final int grade;
   final String subject;
 
-  final TheoryController controller =
-    Get.isRegistered<TheoryController>() ? Get.find<TheoryController>() : Get.put(TheoryController());
-  final QuizController quizController =
-    Get.isRegistered<QuizController>() ? Get.find<QuizController>() : Get.put(QuizController());
-  final ProgressController progressController =
-    Get.isRegistered<ProgressController>() ? Get.find<ProgressController>() : Get.put(ProgressController());
+  // ❌ (single instance dễ “kẹt” dữ liệu môn cũ)
+  // final TheoryController controller =
+  //   Get.isRegistered<TheoryController>() ? Get.find<TheoryController>() : Get.put(TheoryController());
 
+  // ✅ Quiz & Progress vẫn giữ như cũ
+  final QuizController quizController =
+  Get.isRegistered<QuizController>() ? Get.find<QuizController>() : Get.put(QuizController());
+  final ProgressController progressController =
+  Get.isRegistered<ProgressController>() ? Get.find<ProgressController>() : Get.put(ProgressController());
 
   SubjectDetailScreen({super.key, int? grade, String? subject})
-      : grade = grade ?? (Get.arguments?['grade'] ?? 7),
-        subject = subject ?? (Get.arguments?['subject'] ?? 'Toán') {
-    // Load lý thuyết khi khởi tạo màn hình
-    controller.loadTheory(this.subject, this.grade);
+      : grade = grade ?? (Get.arguments?['grade']),
+        subject = subject ?? (Get.arguments?['subject']) {
+    // ✅ HƯỚNG B: tạo/lấy TheoryController theo TAG cho combo (subject, grade)
+    final tag = 'theory_${this.subject}_${this.grade}';
+    if (Get.isRegistered<TheoryController>() && !Get.isRegistered<TheoryController>(tag: tag)) {
+      Get.delete<TheoryController>();
+    }
+    if (!Get.isRegistered<TheoryController>(tag: tag)) {
+      Get.put(TheoryController(), tag: tag);
+    }
+    final TheoryController c = Get.find<TheoryController>(tag: tag);
+    // ✅ Load đúng môn/lớp (clear dữ liệu cũ đã làm trong controller)
+    c.loadTheory(this.subject, this.grade);
   }
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Lấy lại controller theo tag để dùng trong onTap
+    final theoryTag = 'theory_${subject}_$grade';
+    final TheoryController controller = Get.find<TheoryController>(tag: theoryTag);
+
     final List<Map<String, dynamic>> featureCards = [
       {
         "title": "Lý thuyết",
         "icon": Icons.menu_book_rounded,
         "color": Colors.blue,
-        "onTap": () async{
+        "onTap": () async {
           await controller.loadTheory(subject, grade);
-          // ❌ Không truyền userId nữa (TheoryController sẽ fallback = 1)
           Get.toNamed(
             AppRoutes.theory,
             arguments: {
               'subject': subject,
               'grade': grade,
+              // ✅ TRUYỀN TAG để các màn con (LessonDetailScreen) lấy đúng controller
+              'theoryTag': theoryTag,
+              // 'userId': 15, // nếu cần
             },
           );
         },
@@ -56,6 +73,8 @@ class SubjectDetailScreen extends StatelessWidget {
             'subject': subject,
             'grade': grade,
             'mode': 'exercise',
+            // ✅ vẫn truyền tag để màn con đọc đúng instance nếu cần
+            'theoryTag': theoryTag,
           });
         },
       },

@@ -41,17 +41,25 @@ class SubjectRepository {
 
     return IOClient(httpClient);
   }
+
+  // =========================
+  // FIX: Khử dấu an toàn (không out-of-range)
+  // =========================
   String _normalizeVn(String input) {
-    const src =
-        'àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ'
-        'ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ';
-    const dst =
-        'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuyyyyyd'
-        'AAAAAAAAAAAAAAAAAEEEEEEEEEEEIIIIIoooooooooooooooooUUUUUUUUUUYYYYYĐ';
-    var out = input;
-    for (int i = 0; i < src.length; i++) {
-      out = out.replaceAll(src[i], dst[i]);
-    }
+    // 1) thay riêng đ/Đ để chắc ăn
+    var out = input.replaceAll('đ', 'd').replaceAll('Đ', 'D');
+
+    // 2) gom nhóm nguyên âm có dấu (lower + upper) -> chữ thường cơ bản
+    final Map<RegExp, String> groups = {
+      RegExp(r'[àáạảãâầấậẩẫăằắặẳẵÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴ]'): 'a',
+      RegExp(r'[èéẹẻẽêềếệểễÈÉẸẺẼÊỀẾỆỂỄ]'): 'e',
+      RegExp(r'[ìíịỉĩÌÍỊỈĨ]'): 'i',
+      RegExp(r'[òóọỏõôồốộổỗơờớợởỡÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠ]'): 'o',
+      RegExp(r'[ùúụủũưừứựửữÙÚỤỦŨƯỪỨỰỬỮ]'): 'u',
+      RegExp(r'[ỳýỵỷỹỲÝỴỶỸ]'): 'y',
+    };
+    groups.forEach((re, rep) => out = out.replaceAll(re, rep));
+
     return out.toLowerCase().trim();
   }
 
@@ -65,14 +73,11 @@ class SubjectRepository {
     return n;
   }
 
-  // Khử dấu để so khớp tên
-
-
   // Map ngược code -> tên “ước lượng” để match theo name khi code không khớp
   String _mapCodeToNameFallback(String code) {
     switch (code.toLowerCase()) {
       case 'toan':
-        return 'toan'; // không dấu để so khớp sau khi normalize
+        return 'toan';
       case 'nguvan':
         return 'ngu van';
       case 'tienganh':
@@ -86,21 +91,20 @@ class SubjectRepository {
 
   /// ✅ Lấy chapters + lessons + contents + exercises theo subjectName + grade
   Future<List<Chapter>> fetchTheory(String subjectName, int grade) async {
-    // ===========================
-    // NEW LOGIC (ổn định + fallback)
-    // ===========================
     final subjectCode = _normalizeSubjectCode(subjectName);
     print("🔎 Fetching subject=$subjectName (code=$subjectCode), grade=$grade");
 
-    // 1) Thử tìm subject theo grade+code bằng APIService (sửa lại cho đúng query param)
+    // 1) Thử tìm subject theo grade+code
     try {
       final res1 = await api.get('/subjects?grade=$grade&code=$subjectCode');
       if (res1['statusCode'] == 200) {
         final data = res1['data'];
         int? subjectId;
-        // backend có thể trả List hoặc Object
         if (data is List && data.isNotEmpty) {
-          subjectId = (data.first as Map)['id'] as int?;
+          final first = data.first;
+          if (first is Map && first['id'] != null) {
+            subjectId = first['id'] as int?;
+          }
         } else if (data is Map && data['id'] != null) {
           subjectId = data['id'] as int?;
         }
@@ -109,22 +113,24 @@ class SubjectRepository {
         }
       }
     } catch (_) {
-      // cho qua để thử fallback
+      // ignore để thử fallback
     }
 
     // 2) Fallback: lấy list theo grade, match theo code hoặc name (khử dấu)
     try {
       final res2 = await api.get('/subjects?grade=$grade');
       if (res2['statusCode'] == 200) {
-        final list = (res2['data'] as List?) ?? [];
+        final list = (res2['data'] is List) ? (res2['data'] as List) : <dynamic>[];
         Map<String, dynamic>? found;
 
         // match theo code
         for (final s in list) {
-          final code = (s['code']?.toString().toLowerCase() ?? '');
-          if (code == subjectCode.toLowerCase()) {
-            found = Map<String, dynamic>.from(s);
-            break;
+          if (s is Map) {
+            final code = (s['code']?.toString().toLowerCase() ?? '');
+            if (code == subjectCode.toLowerCase()) {
+              found = Map<String, dynamic>.from(s);
+              break;
+            }
           }
         }
 
@@ -132,154 +138,74 @@ class SubjectRepository {
         if (found == null) {
           final target = _mapCodeToNameFallback(subjectCode); // đã lowercase
           for (final s in list) {
-            final nameNorm = _normalizeVn(s['name']?.toString() ?? '');
-            if (nameNorm.contains(target)) {
-              found = Map<String, dynamic>.from(s);
-              break;
+            if (s is Map) {
+              final nameNorm = _normalizeVn(s['name']?.toString() ?? '');
+              if (nameNorm.contains(target)) {
+                found = Map<String, dynamic>.from(s);
+                break;
+              }
             }
           }
         }
 
         if (found != null) {
-          final subjectId = found['id'] as int;
-          return await _fetchChaptersLessons(subjectId);
+          final subjectId = found['id'] as int?;
+          if (subjectId != null) {
+            return await _fetchChaptersLessons(subjectId);
+          }
         }
       }
     } catch (_) {
-      // rơi xuống DEPRECATED hoặc throw
+      // ignore để throw cuối
     }
 
-    // ===========================
-    // DEPRECATED (giữ lại để tham chiếu – từng giả định API /subjects trả object)
-    // ===========================
-    /*
-    // DEPRECATED: đoạn này giả định /subjects?grade=&code= trả về 1 object có {id}, nhưng backend của bạn trả List.
-    // Để tránh hỏng cấu trúc, mình giữ lại cho bạn tham khảo:
-    try {
-      final subjectRes = await _getWithRetry(
-          "$baseUrl/subjects?grade=$grade&code=$subjectCode");
-      final subjectData = json.decode(subjectRes);
-
-      if (subjectData == null ||
-          subjectData is! Map ||
-          subjectData['id'] == null) {
-        throw Exception("❌ Không tìm thấy môn học: $subjectName - Khối $grade");
-      }
-      final int subjectId = subjectData['id'];
-
-      // 2️⃣ Lấy danh sách chapters
-      final chaptersRes =
-          await _getWithRetry("$baseUrl/subjects/$subjectId/chapters");
-      final chaptersJson = json.decode(chaptersRes) as List;
-
-      List<Chapter> chapters = [];
-
-      for (var chapterJson in chaptersJson) {
-        final chapterId = chapterJson['id'];
-        if (chapterId == null) continue;
-
-        // 3️⃣ Lấy danh sách lessons
-        final lessonsRes =
-            await _getWithRetry("$baseUrl/chapters/$chapterId/lessons");
-        final lessonsJson = json.decode(lessonsRes) as List;
-
-        List<Lesson> lessons = [];
-
-        for (var lessonJson in lessonsJson) {
-          lessonJson['subjectId'] = subjectId; // gán subjectId cho lesson
-          Lesson lesson =
-              Lesson.fromJson(Map<String, dynamic>.from(lessonJson));
-
-          // 4️⃣ Lấy contents
-          final contentsRes = await _getWithRetry(
-              "$baseUrl/lessons/${lesson.id}/contents");
-          final contentsJson = json.decode(contentsRes) as List;
-
-          final contents = contentsJson
-              .map<ContentItem>((x) =>
-                  ContentItem.fromJson(Map<String, dynamic>.from(x)))
-              .toList()
-            ..sort((a, b) => a.order.compareTo(b.order));
-
-          lesson = lesson.copyWith(contents: contents);
-
-          // 5️⃣ Lấy exercises
-          final exercisesRes = await _getWithRetry(
-              "$baseUrl/lessons/${lesson.id}/exercises");
-          final exercisesJson = json.decode(exercisesRes) as List;
-
-          List<Exercise> exercises = [];
-
-          for (var exJson in exercisesJson) {
-            Exercise exercise =
-                Exercise.fromJson(Map<String, dynamic>.from(exJson));
-
-            // 6️⃣ Lấy solutions
-            final solutionsRes = await _getWithRetry(
-                "$baseUrl/exercises/${exercise.id}/solutions");
-            final solutionsJson = json.decode(solutionsRes) as List;
-
-            final solutions = solutionsJson
-                .map<ExerciseSolution>((x) =>
-                    ExerciseSolution.fromJson(Map<String, dynamic>.from(x)))
-                .toList();
-
-            exercise = exercise.copyWith(solutions: solutions);
-            exercises.add(exercise);
-          }
-
-          lesson = lesson.copyWith(exercises: exercises);
-          lessons.add(lesson);
-        }
-
-        Chapter chapter =
-            Chapter.fromJson(Map<String, dynamic>.from(chapterJson))
-                .copyWith(lessons: lessons);
-        chapters.add(chapter);
-      }
-
-      return chapters;
-    } catch (e) {
-      print("❌ ERROR fetchTheory (DEPRECATED path): $e");
-      // tiếp tục throw ở dưới
-    }
-    */
+    // DEPRECATED path — giữ lại để tham khảo (đã comment ở bản trước)
 
     // Nếu tới đây vẫn chưa return được:
     throw Exception("❌ Không tìm thấy môn học: $subjectCode - Khối $grade");
   }
 
-  // ===== Helper chính thống hiện tại để lấy chapters/lessons/contents/exercises
+  // ===== Helper chính thống để lấy chapters/lessons/contents/exercises (có check an toàn)
   Future<List<Chapter>> _fetchChaptersLessons(int subjectId) async {
-    // 2️⃣ Lấy danh sách chapters
+    // 2) chapters
+    print("📦 _fetchChaptersLessons => subjectId=$subjectId");
     final chaptersRes =
     await _getWithRetry("$baseUrl/subjects/$subjectId/chapters");
-    final chaptersJson = json.decode(chaptersRes) as List;
+    final chaptersDecoded = json.decode(chaptersRes);
+    final chaptersJson = (chaptersDecoded is List) ? chaptersDecoded : <dynamic>[];
 
-    List<Chapter> chapters = [];
+    final List<Chapter> chapters = [];
 
-    for (var chapterJson in chaptersJson) {
-      final chapterId = chapterJson['id'];
+    for (final ch in chaptersJson) {
+      if (ch is! Map) continue;
+      final chapterId = ch['id'];
       if (chapterId == null) continue;
 
-      // 3️⃣ Lấy danh sách lessons
+      // 3) lessons
       final lessonsRes =
       await _getWithRetry("$baseUrl/chapters/$chapterId/lessons");
-      final lessonsJson = json.decode(lessonsRes) as List;
+      final lessonsDecoded = json.decode(lessonsRes);
+      final lessonsJson = (lessonsDecoded is List) ? lessonsDecoded : <dynamic>[];
 
-      List<Lesson> lessons = [];
+      final List<Lesson> lessons = [];
 
-      for (var lessonJson in lessonsJson) {
+      for (final lj in lessonsJson) {
+        if (lj is! Map) continue;
+
         // gán subjectId cho lesson để UI/Progress dùng khi post
-        lessonJson['subjectId'] = subjectId;
-        Lesson lesson = Lesson.fromJson(Map<String, dynamic>.from(lessonJson));
+        lj['subjectId'] = subjectId;
 
-        // 4️⃣ Lấy contents
+        Lesson lesson = Lesson.fromJson(Map<String, dynamic>.from(lj));
+
+        // 4) contents
         final contentsRes =
         await _getWithRetry("$baseUrl/lessons/${lesson.id}/contents");
-        final contentsJson = json.decode(contentsRes) as List;
+        final contentsDecoded = json.decode(contentsRes);
+        final contentsJson =
+        (contentsDecoded is List) ? contentsDecoded : <dynamic>[];
 
         final contents = contentsJson
+            .whereType<Map>()
             .map<ContentItem>(
                 (x) => ContentItem.fromJson(Map<String, dynamic>.from(x)))
             .toList()
@@ -287,23 +213,30 @@ class SubjectRepository {
 
         lesson = lesson.copyWith(contents: contents);
 
-        // 5️⃣ Lấy exercises
+        // 5) exercises
         final exercisesRes =
         await _getWithRetry("$baseUrl/lessons/${lesson.id}/exercises");
-        final exercisesJson = json.decode(exercisesRes) as List;
+        final exercisesDecoded = json.decode(exercisesRes);
+        final exercisesJson =
+        (exercisesDecoded is List) ? exercisesDecoded : <dynamic>[];
 
-        List<Exercise> exercises = [];
+        final List<Exercise> exercises = [];
 
-        for (var exJson in exercisesJson) {
+        for (final ex in exercisesJson) {
+          if (ex is! Map) continue;
+
           Exercise exercise =
-          Exercise.fromJson(Map<String, dynamic>.from(exJson));
+          Exercise.fromJson(Map<String, dynamic>.from(ex));
 
-          // 6️⃣ Lấy solutions
+          // 6) solutions
           final solutionsRes = await _getWithRetry(
               "$baseUrl/exercises/${exercise.id}/solutions");
-          final solutionsJson = json.decode(solutionsRes) as List;
+          final solutionsDecoded = json.decode(solutionsRes);
+          final solutionsJson =
+          (solutionsDecoded is List) ? solutionsDecoded : <dynamic>[];
 
           final solutions = solutionsJson
+              .whereType<Map>()
               .map<ExerciseSolution>((x) =>
               ExerciseSolution.fromJson(Map<String, dynamic>.from(x)))
               .toList();
@@ -316,9 +249,8 @@ class SubjectRepository {
         lessons.add(lesson);
       }
 
-      Chapter chapter =
-      Chapter.fromJson(Map<String, dynamic>.from(chapterJson))
-          .copyWith(lessons: lessons);
+      final chapter =
+      Chapter.fromJson(Map<String, dynamic>.from(ch)).copyWith(lessons: lessons);
       chapters.add(chapter);
     }
 

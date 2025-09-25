@@ -10,17 +10,22 @@ class TheoryScreen extends StatelessWidget {
   final Color primaryGreen = const Color(0xFF4CAF50);
 
   TheoryScreen({super.key, required this.subject, required this.grade})
-    : mode = Get.arguments?['mode'] ?? 'theory';
+      : mode = Get.arguments?['mode'] ?? 'theory';
 
   @override
   Widget build(BuildContext context) {
-    // Chỉ khởi tạo 1 lần controller
-    final TheoryController controller = Get.put(
-      TheoryController(),
-      permanent: true,
-    );
+    // ✅ Tạo TAG duy nhất cho combo (subject, grade)
+    final String theoryTag = 'theory_${subject}_$grade';
 
-    // Load theory 1 lần sau init
+    // ❌ (cũ) single instance dễ “dính” dữ liệu môn khác
+    // final TheoryController controller = Get.put(TheoryController(), permanent: true);
+
+    // ✅ (mới) dùng controller theo TAG, không đổi cấu trúc tổng thể
+    final TheoryController controller = Get.isRegistered<TheoryController>(tag: theoryTag)
+        ? Get.find<TheoryController>(tag: theoryTag)
+        : Get.put(TheoryController(), tag: theoryTag);
+
+    // Load theory 1 lần sau init (đúng theo subject/grade hiện tại)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       controller.loadTheory(subject, grade);
     });
@@ -98,7 +103,15 @@ class TheoryScreen extends StatelessWidget {
                           ? AppRoutes.lessonDetail
                           : AppRoutes.solveExercisesDetail;
 
-                      Get.toNamed(route, arguments: {'lesson': lesson});
+                      // ✅ TRUYỀN theoryTag để LessonDetailScreen lấy đúng controller theo TAG
+                      Get.toNamed(
+                        route,
+                        arguments: {
+                          'lesson': lesson,
+                          'subjectId': lesson.subjectId,   // giữ nguyên, nếu có
+                          'theoryTag': 'theory_${subject}_$grade',
+                        },
+                      );
                     },
                   );
                 }).toList(),

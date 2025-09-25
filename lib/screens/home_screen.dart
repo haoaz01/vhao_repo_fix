@@ -2,9 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_elearning_application/controllers/auth_controller.dart';
 import 'package:flutter_elearning_application/screens/subject_detail_screen.dart';
 import 'package:get/get.dart';
+import 'package:flutter_elearning_application/controllers/progress_controller.dart';
+
 
 class HomeScreen extends StatelessWidget {
   final AuthController authController = Get.find<AuthController>();
+  final ProgressController progressController =
+  Get.isRegistered<ProgressController>()
+      ? Get.find<ProgressController>()
+      : Get.put(ProgressController());
+
 
   HomeScreen({super.key});
 
@@ -59,7 +66,11 @@ class HomeScreen extends StatelessWidget {
                     onTap: () {
                       authController.setSelectedClass(value);
                       Get.back();
-                    },
+                      // Optional: load lại progress cho lớp mới (nếu backend phân lớp theo user)
+                      if (!progressController.isLoading.value) {
+                        progressController.loadProgress(userId: 15);
+                      }
+                      },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 12),
@@ -114,6 +125,11 @@ class HomeScreen extends StatelessWidget {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!authController.isClassSelected.value) {
         _showClassSelector();
+      }
+      //vhao adding version
+      if (!progressController.isLoading.value &&
+          progressController.progressMap.isEmpty) {
+        progressController.loadProgress(userId: 15);
       }
     });
 
@@ -311,6 +327,9 @@ class HomeScreen extends StatelessWidget {
           double iconSize = constraints.maxHeight * 0.4; // icon ~40% chiều cao card
           double fontSize = constraints.maxHeight * 0.15; // text ~15% chiều cao
           fontSize = fontSize.clamp(12, 18); // giới hạn font size
+
+          final color = subjectColors[subject] ?? Colors.blue;
+
 
           return AnimatedContainer(
             duration: const Duration(milliseconds: 300),

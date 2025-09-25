@@ -21,7 +21,12 @@ class _LessonDetailScreenState extends State<LessonDetailScreen>
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   YoutubePlayerController? _youtubeController;
-  final TheoryController theoryController = Get.find<TheoryController>();
+
+  // ❌ Bỏ cố định single instance — dễ “dính” môn cũ
+  // final TheoryController theoryController = Get.find<TheoryController>();
+  // ✅ Dùng late + lấy theo tag ở initState
+  late final TheoryController theoryController;
+
   bool _isLoading = true;
   late AnimationController _animController;
   bool _isCompleted = false;
@@ -30,6 +35,17 @@ class _LessonDetailScreenState extends State<LessonDetailScreen>
   @override
   void initState() {
     super.initState();
+
+    // ✅ Lấy TheoryController theo tag
+    final String? theoryTag = Get.arguments?['theoryTag'];
+    if (theoryTag != null && Get.isRegistered<TheoryController>(tag: theoryTag)) {
+      theoryController = Get.find<TheoryController>(tag: theoryTag);
+    } else {
+      // Fallback (hạn chế dùng) – log cảnh báo để dễ soi
+      // ignore: avoid_print
+      print('⚠️ LessonDetailScreen: missing theoryTag, falling back to global TheoryController');
+      theoryController = Get.find<TheoryController>();
+    }
 
     // Animation cho nút hoàn thành
     _animController = AnimationController(
@@ -45,6 +61,7 @@ class _LessonDetailScreenState extends State<LessonDetailScreen>
     // Khởi tạo video player
     _initializePlayer();
   }
+
 
   Future<void> _initializePlayer() async {
     final videoUrl = widget.lesson.videoUrl;

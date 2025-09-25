@@ -41,11 +41,17 @@ class TheoryController extends GetxController {
   Future<void> loadTheory(String subject, int grade) async {
     try {
       isLoading.value = true;
-      final code = _mapSubjectToCode(subject);
-      final data = await repository.fetchTheory(code, grade);
-      chapters.value = data;
+      this.subject = subject; // đồng bộ lại state hiện tại
+      this.grade   = grade;
 
-      _updateProgress(subject, grade); // update progress ngay khi load xong
+      // Clear UI ngay để tránh “dính” dữ liệu môn cũ
+      chapters.clear();
+
+      // ✅ Truyền **tên môn**. Repo sẽ tự normalize ra code bên trong.
+      final data = await repository.fetchTheory(subject, grade);
+      chapters.assignAll(data);
+
+      _updateProgress(subject, grade);
     } catch (e) {
       Get.snackbar('Lỗi tải dữ liệu', 'Không thể tải môn $subject: $e');
     } finally {
@@ -90,11 +96,18 @@ class TheoryController extends GetxController {
         subjectId: subjectId,
       );if (!ok) {
         // rollback UI local nếu bạn muốn
+        completedLessonsBySubject[key]!.remove(lessonTitle);
+      }else {
+        // ✅ đồng bộ lại Dashboard sau khi server nhận update
+        // (nếu ProgressController.markLessonCompleted chưa tự load lại)
+        await progressController.loadProgress(userId: userId);
+        // hoặc dùng userId biến thực tế:
+        // await progressController.loadProgress(userId: userId);
       }
     }
 
     await _saveCompletedLessons(subject, grade);
-    completedLessonsBySubject.refresh();
+    // completedLessonsBySubject.refresh();
     _updateProgress(subject, grade);
   }
 
