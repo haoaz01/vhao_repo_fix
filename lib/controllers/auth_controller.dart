@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_elearning_application/controllers/progress_controller.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_service.dart';
@@ -29,10 +30,26 @@ class AuthController extends GetxController {
 
   var resetToken = ''.obs;
 
+  final progress = Get.find<ProgressController>();
+
   @override
   void onInit() {
     super.onInit();
     loadUserData();
+  }
+
+  Future<void> _syncProgressWithUser() async {
+    // Lấy userId và grade đã chọn từ local
+    final prefs = await SharedPreferences.getInstance();
+    final loggedInUserId = prefs.getInt('userId') ?? 0;
+    final chosenGrade = int.tryParse(selectedClass.value) ?? 0;
+
+    if (loggedInUserId > 0 && chosenGrade > 0) {
+      progress.setCurrentUser(loggedInUserId);
+      await progress.setSelectedGrade(chosenGrade);
+      await progress.loadProgress(userId: loggedInUserId);
+      progress.refreshStats();
+    }
   }
 
   Future<void> loadUserData() async {
@@ -46,6 +63,7 @@ class AuthController extends GetxController {
 
     if (isLoggedIn.value) {
       updateSubjects();
+      await _syncProgressWithUser();
     }
   }
 
@@ -84,7 +102,6 @@ class AuthController extends GetxController {
 
     isLoading.value = true;
 
-    // ✅ Nếu username trống → gán bằng email
     String finalUsername = usernameController.text.trim().isEmpty
         ? emailController.text.trim()
         : usernameController.text.trim();
@@ -138,14 +155,18 @@ class AuthController extends GetxController {
       final data = response['data'] ?? {};
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('email', data['email'] ?? loginEmail);
-      await prefs.setString('username', data['username'] ?? loginEmail); // ✅ fallback email
+      await prefs.setString('username', data['username'] ?? loginEmail);
       await prefs.setString('authToken', data['token'] ?? '');
       await prefs.setBool('isLoggedIn', true);
+      await prefs.setInt('userId', data['id'] ?? 0); // ✅ lưu userId cho progress
 
       isLoggedIn.value = true;
       email.value = data['email'] ?? loginEmail;
       username.value = data['username'] ?? loginEmail;
       authToken.value = data['token'] ?? '';
+
+      // đồng bộ progress ngay sau login
+      await _syncProgressWithUser();
 
       Get.snackbar(
         "Thành công",
@@ -266,6 +287,7 @@ class AuthController extends GetxController {
     await prefs.setBool('isLoggedIn', false);
     await prefs.remove('authToken');
     await prefs.remove('username');
+    await prefs.remove('userId');
 
     isLoggedIn.value = false;
     email.value = '';
@@ -295,6 +317,9 @@ class AuthController extends GetxController {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('selectedClass', value);
     subjects.refresh();
+
+    // Đồng bộ progress theo lớp mới chọn
+    await _syncProgressWithUser();
   }
 
   void updateSubjects() {

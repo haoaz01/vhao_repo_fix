@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'controllers/auth_controller.dart';
 import 'controllers/main_controller.dart';
+import 'controllers/progress_controller.dart'; // ✅ THÊM IMPORT NÀY
+
 import 'app/routes/app_page.dart';
 import 'app/routes/app_routes.dart';
 
@@ -13,17 +16,18 @@ void main() async {
   final bool isFirstOpen = prefs.getBool('isFirstOpen') ?? true;
   final bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
-  // Khởi tạo các controller
-  Get.put(AuthController());
-  Get.put(MainController());
+  // ✅ Khởi tạo controller theo đúng thứ tự:
+  // 1) ProgressController phải có trước để các nơi khác Get.find được
+  Get.put<ProgressController>(ProgressController(), permanent: true);
 
-  // Quyết định initialRoute dựa trên isFirstOpen trước
-  String initialRoute;
-  if (isFirstOpen) {
-    initialRoute = AppRoutes.welcome; // lần đầu mở app
-  } else {
-    initialRoute = isLoggedIn ? AppRoutes.main : AppRoutes.login;
-  }
+  // 2) Các controller khác
+  Get.put<AuthController>(AuthController(), permanent: true);
+  Get.put<MainController>(MainController(), permanent: true);
+
+  // Tính initialRoute
+  final String initialRoute = isFirstOpen
+      ? AppRoutes.welcome
+      : (isLoggedIn ? AppRoutes.main : AppRoutes.login);
 
   runApp(MyApp(initialRoute: initialRoute));
 }

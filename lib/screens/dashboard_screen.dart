@@ -6,7 +6,6 @@ import '../controllers/theory_controller.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
-
 void main() {
   runApp(DashboardApp());
 }
@@ -33,7 +32,7 @@ class DashBoardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -68,12 +67,20 @@ class DashBoardScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
                       children: [
+                        // 1) Lịch sử & tiến độ theo môn (chart)
                         ProgressHistorySection(),
                         const SizedBox(height: 16),
+
+                        // 2) Các môn học (4 card giống ảnh mẫu)
+                        SubjectsOverviewWidget(grade: 7),
+                        const SizedBox(height: 16),
+
+                        // 3) Streak card
                         _buildStreakCard(),
                         const SizedBox(height: 16),
                       ],
@@ -91,12 +98,8 @@ class DashBoardScreen extends StatelessWidget {
   Widget _buildStreakCard() {
     final progressController = Get.find<ProgressController>();
 
-
-
     return GestureDetector(
-      onTap: () {
-        Get.to(() => StreakScreen());
-      },
+      onTap: () => Get.to(() => const StreakScreen()),
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -104,7 +107,6 @@ class DashBoardScreen extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: FutureBuilder<
               ({int currentStreak, int bestStreak, int totalDays, int weekCount})>(
-            // mỗi lần statsVersion đổi (khi hoàn thành bài), rebuild dữ liệu
             key: ValueKey(progressController.statsVersion.value),
             future: progressController.computeStreak(),
             builder: (context, snapshot) {
@@ -124,7 +126,8 @@ class DashBoardScreen extends StatelessWidget {
                       SizedBox(width: 8),
                       Text(
                         '🔥 Chuỗi Ngày Học Liên Tiếp',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -143,8 +146,13 @@ class DashBoardScreen extends StatelessWidget {
                     children: [
                       const Icon(Icons.emoji_events, size: 18, color: Colors.amber),
                       const SizedBox(width: 6),
-                      Text('Kỷ lục: ${data.bestStreak} ngày',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(
+                        'Kỷ lục: ${data.bestStreak} ngày',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -158,6 +166,7 @@ class DashBoardScreen extends StatelessWidget {
 
   Widget _buildStreakStat(String value, String label) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           value,
@@ -177,27 +186,210 @@ class DashBoardScreen extends StatelessWidget {
   }
 }
 
+/// =======================
+/// Các môn học (4 thẻ %)
+/// =======================
+class SubjectsOverviewWidget extends StatelessWidget {
+  final int grade;
+  SubjectsOverviewWidget({super.key, required this.grade});
+
+  final ProgressController progressController = Get.find<ProgressController>();
+
+  // Ảnh asset bạn cung cấp
+  final Map<String, String> subjectIcons = const {
+    'Toán': 'assets/icon/toan.png',
+    'Khoa Học Tự Nhiên': 'assets/icon/khoahoctunhien.png',
+    'Ngữ Văn': 'assets/icon/nguvan.png',
+    'Tiếng Anh': 'assets/icon/tienganh.png',
+  };
+
+  // Màu theo môn
+  final Map<String, Color> subjectColors = const {
+    'Toán': Colors.blue,
+    'Khoa Học Tự Nhiên': Colors.green,
+    'Ngữ Văn': Colors.orange,
+    'Tiếng Anh': Colors.purple,
+  };
+
+  // Thứ tự hiển thị như ảnh mẫu
+  final List<String> subjectsOrder = const [
+    'Toán',
+    'Khoa Học Tự Nhiên',
+    'Tiếng Anh',
+    'Ngữ Văn',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    // Load % lần đầu nếu cần
+    if (progressController.progressMap.isEmpty &&
+        !progressController.isLoading.value) {
+      progressController.loadProgress(userId: 15);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Các môn học',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,color: Colors.white),
+        ),
+        const SizedBox(height: 10),
+
+        // Grid 2 cột, chiều cao gọn như ảnh
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: subjectsOrder.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.9, // ngang giống ảnh
+          ),
+          itemBuilder: (_, i) {
+            final name = subjectsOrder[i];
+            final icon = subjectIcons[name]!;
+            final color = subjectColors[name]!;
+
+            // chỉ wrap progress bằng Obx để tránh GetX error
+            return Obx(() {
+              final code = progressController.mapSubjectToCode(name);
+              final p = progressController.getProgressAnyGrade(code);
+              return _SubjectCard(
+                title: name,
+                iconPath: icon,
+                color: color,
+                progress: p,
+              );
+            });
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _SubjectCard extends StatelessWidget {
+  final String title;
+  final String iconPath;
+  final Color color;
+  final double progress;
+
+  const _SubjectCard({
+    Key? key,
+    required this.title,
+    required this.iconPath,
+    required this.color,
+    required this.progress,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final Color border = color.withOpacity(0.35); // viền nhạt
+    final Color track  = color.withOpacity(0.15); // track progress nhạt
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white, // nền trắng hoàn toàn
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border, width: 1), // viền màu theo môn
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // icon + tên môn
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: border, width: 1),
+                ),
+                alignment: Alignment.center,
+                child: Image.asset(
+                  iconPath,
+                  width: 22,
+                  height: 22,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const Spacer(),
+
+          // progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              minHeight: 8,
+              backgroundColor: track,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${(progress * 100).toStringAsFixed(0)}% Hoàn thành',
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// ======================================
+/// Lịch sử & tiến độ theo môn (có chart)
+/// ======================================
 class ProgressHistorySection extends StatefulWidget {
   @override
   State<ProgressHistorySection> createState() => _ProgressHistorySectionState();
 }
 
 class _ProgressHistorySectionState extends State<ProgressHistorySection> {
-  // mặc định xem theo tuần
   StatsRange range = StatsRange.week;
 
   final ProgressController progressController = Get.find<ProgressController>();
-  // Không cần TheoryController cho chart => nếu bạn đã put ở trên vẫn OK, nhưng ở đây không dùng
 
-  // ✅ subjectId khớp backend
   final Map<int, String> subjectNames = const {
-    1: "Toán",
-    2: "Ngữ văn",
-    3: "Tiếng Anh",
-    4: "Khoa học Tự nhiên",
+    1: 'Toán',
+    2: 'Ngữ văn',
+    3: 'Tiếng Anh',
+    4: 'Khoa học Tự nhiên',
   };
 
-  // màu cho từng môn
   final Map<int, Color> subjectColors = const {
     1: Colors.blue,
     2: Colors.orange,
@@ -205,19 +397,18 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
     4: Colors.green,
   };
 
-  int selectedSubjectId = 1; // mặc định Toán
-  int selectedGrade = 7;     // tuỳ bạn bind theo lớp chọn
+  int selectedSubjectId = 1;
+  int selectedGrade = 7;
 
   @override
   void initState() {
     super.initState();
-    // Đảm bảo có % progress để đồng bộ UI (không ảnh hưởng chart local)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (progressController.progressMap.isEmpty &&
           !progressController.isLoading.value) {
         await progressController.loadProgress(userId: 15);
       }
-      setState(() {}); // refresh lần đầu
+      if (mounted) setState(() {});
     });
   }
 
@@ -228,9 +419,9 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
       final subjectCode = progressController.mapSubjectToCode(subjectName);
       final color = subjectColors[selectedSubjectId] ?? Colors.teal;
 
+      // trigger rebuild khi log thay đổi
       final _ = progressController.statsVersion.value;
 
-      // % tổng từ server (để show thanh progress tổng nếu muốn)
       final overall = progressController.getProgress(subjectCode, selectedGrade);
 
       return Card(
@@ -242,32 +433,33 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "📚 Lịch sử & tiến độ theo môn",
+                '📚 Lịch sử & tiến độ theo môn',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
 
-              // Dropdown chọn môn
               DropdownButtonFormField<int>(
                 value: selectedSubjectId,
                 decoration: InputDecoration(
-                  labelText: "Chọn môn học",
+                  labelText: 'Chọn môn học',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   isDense: true,
                 ),
                 items: subjectNames.entries
-                    .map((e) => DropdownMenuItem(
-                  value: e.key,
-                  child: Text(e.value),
-                ))
+                    .map((e) =>
+                    DropdownMenuItem(value: e.key, child: Text(e.value)))
                     .toList(),
                 onChanged: (val) async {
                   if (val == null) return;
                   setState(() => selectedSubjectId = val);
-
-                  // Optional: đồng bộ % từ server nếu trống
+                  final subjectName = subjectNames[val]!;
+                  final subjectCode = progressController.mapSubjectToCode(subjectNames[val]!);
+                  final best = progressController.getBestGradeFor(subjectCode);
+                  if (best != null) {
+                    selectedGrade = best; // chuyển về grade có data
+                  }
                   if (progressController.progressMap.isEmpty &&
                       !progressController.isLoading.value) {
                     await progressController.loadProgress(userId: 15);
@@ -278,7 +470,6 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
 
               const SizedBox(height: 16),
 
-              // Thanh % tổng của môn (có thể giữ hoặc bỏ)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
@@ -290,29 +481,25 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
               ),
               const SizedBox(height: 6),
               Text(
-                "Hoàn thành: ${(overall * 100).toStringAsFixed(0)}%",
+                'Hoàn thành: ${(overall * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
               ),
 
               const SizedBox(height: 16),
 
-              // Chọn range (ngày/tuần/tháng)
               Row(
                 children: [
                   const Text(
-                    "Khoảng thời gian:",
+                    'Khoảng thời gian:',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 12),
                   DropdownButton<StatsRange>(
                     value: range,
                     items: const [
-                      DropdownMenuItem(
-                          value: StatsRange.day, child: Text("7 ngày")),
-                      DropdownMenuItem(
-                          value: StatsRange.week, child: Text("8 tuần")),
-                      DropdownMenuItem(
-                          value: StatsRange.month, child: Text("6 tháng")),
+                      DropdownMenuItem(value: StatsRange.day, child: Text('7 ngày')),
+                      DropdownMenuItem(value: StatsRange.week, child: Text('8 tuần')),
+                      DropdownMenuItem(value: StatsRange.month, child: Text('6 tháng')),
                     ],
                     onChanged: (val) {
                       if (val == null) return;
@@ -324,9 +511,9 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
 
               const SizedBox(height: 12),
 
-              // Biểu đồ cột: số bài hoàn thành theo ngày/tuần/tháng
               FutureBuilder<Map<DateTime, int>>(
-                key: ValueKey('$subjectCode-$selectedGrade-$range-${progressController.statsVersion.value}'), // ⬅️ thêm key
+                key: ValueKey(
+                    '$subjectCode-$selectedGrade-$range-${progressController.statsVersion.value}'),
                 future: progressController.getCompletionStats(
                   subjectCode: subjectCode,
                   grade: selectedGrade,
@@ -343,23 +530,21 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
                   if (data.isEmpty) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8.0),
-                      child: Text("Chưa có lịch sử học để hiển thị."),
+                      child: Text('Chưa có lịch sử học để hiển thị.'),
                     );
                   }
 
                   final keys = data.keys.toList()..sort();
                   final values =
                   keys.map((k) => (data[k] ?? 0).toDouble()).toList();
-                  final maxY = values.isEmpty
-                      ? 1.0
-                      : values.reduce((a, b) => a > b ? a : b);
+                  final maxY =
+                  values.isEmpty ? 1.0 : values.reduce((a, b) => a > b ? a : b);
 
                   String fmtLabel(DateTime d) {
                     switch (range) {
                       case StatsRange.day:
                         return DateFormat('dd/MM').format(d);
                       case StatsRange.week:
-                      // hiển thị ngày đầu tuần
                         return DateFormat('dd/MM').format(d);
                       case StatsRange.month:
                         return DateFormat('MM/yy').format(d);
@@ -374,11 +559,9 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
                         maxY: (maxY < 3 ? 3 : maxY + 1),
                         barTouchData: BarTouchData(enabled: true),
                         titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 30,
-                            ),
+                          leftTitles: const AxisTitles(
+                            sideTitles:
+                            SideTitles(showTitles: true, reservedSize: 30),
                           ),
                           bottomTitles: AxisTitles(
                             sideTitles: SideTitles(
@@ -406,7 +589,8 @@ class _ProgressHistorySectionState extends State<ProgressHistorySection> {
                             sideTitles: SideTitles(showTitles: false),
                           ),
                         ),
-                        gridData: FlGridData(show: true, drawVerticalLine: false),
+                        gridData:
+                        FlGridData(show: true, drawVerticalLine: false),
                         barGroups: List.generate(keys.length, (i) {
                           return BarChartGroupData(
                             x: i,

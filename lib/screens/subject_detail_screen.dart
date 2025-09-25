@@ -179,6 +179,12 @@ class SubjectDetailScreen extends StatelessWidget {
                             if (card["title"] == "Lý thuyết") ...[
                               const SizedBox(height: 12),
                               Obx(() {
+                                // đảm bảo đã load data cho user hiện tại
+                                final uid = progressController.currentUserId.value;
+                                if (progressController.progressMap.isEmpty && !progressController.isLoading.value && uid > 0) {
+                                  progressController.loadProgress(userId: uid);
+                                }
+
                                 final progress = progressController.getProgress(
                                   progressController.mapSubjectToCode(subject),
                                   grade,

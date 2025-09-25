@@ -17,6 +17,9 @@ class _StreakScreenState extends State<StreakScreen> {
   late int currentMonth;
   late int currentYear;
 
+  // GetX worker để hủy đúng lifecycle
+  late Worker _statsWorker;
+
   // Helper: chuẩn hoá về 00:00 để so sánh ngày
   DateTime _dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -24,21 +27,14 @@ class _StreakScreenState extends State<StreakScreen> {
   void initState() {
     super.initState();
 
+    // (Test) có thể set cứng ngày nếu cần kiểm thử
     now = DateTime(2025, 9, 19);
 
-
-
-
-
-    // thêm log giả: học vào các ngày trước hôm nay
-    final pc = Get.find<ProgressController>();
-    pc.addFakeStudyLog(subjectCode: 'toan', grade: 7, day: now.subtract(const Duration(days: 1)));
-    pc.addFakeStudyLog(subjectCode: 'toan', grade: 7, day: now.subtract(const Duration(days: 2)));
-    pc.addFakeStudyLog(subjectCode: 'toan', grade: 7, day: now.subtract(const Duration(days: 5)));
-
-
-
-
+    // // thêm log giả: học vào các ngày trước hôm nay
+    // final pc = Get.find<ProgressController>();
+    // pc.addFakeStudyLog(subjectCode: 'toan', grade: 7, day: now.subtract(const Duration(days: 1)));
+    // pc.addFakeStudyLog(subjectCode: 'toan', grade: 7, day: now.subtract(const Duration(days: 2)));
+    // pc.addFakeStudyLog(subjectCode: 'toan', grade: 7, day: now.subtract(const Duration(days: 5)));
 
     // 1) "Hôm nay" — nếu muốn test ngày 19/09/2025 thì bỏ comment dòng dưới:
     // now = DateTime(2025, 9, 19);
@@ -48,13 +44,24 @@ class _StreakScreenState extends State<StreakScreen> {
     currentMonth = now.month;
     currentYear  = now.year;
 
-    // 3) Tải log các ngày đã học (toàn cục)
+    // 3) Tải log các ngày đã học (toàn cục cho user hiện tại)
     _loadData();
+
+    // 4) Lắng nghe thay đổi statsVersion để reload dữ liệu streak
+    _statsWorker = ever(progressController.statsVersion, (_) {
+      _loadData(); // reload khi có log/progress mới
+    });
+  }
+
+  @override
+  void dispose() {
+    // hủy worker để tránh leak
+    _statsWorker.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
-    // ❗ Dùng hàm public đã thêm trong ProgressController:
-    // Future<Set<DateTime>> readStudyDays() => _loadAllStudyDays();
+    // ❗ Dùng hàm public trong ProgressController (đã tách theo user)
     final days = await progressController.readStudyDays();
     // Chuẩn hoá về 00:00
     final normalized = days.map(_dayKey).toSet();
